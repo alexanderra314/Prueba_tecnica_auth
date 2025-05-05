@@ -1,0 +1,50 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  imageName: 'backend-auth'
+
+stages:
+  - stage: Build
+    jobs:
+      - job: BuildBackend
+        steps:
+          - task: GoTool@0
+            inputs:
+              version: '1.20'
+
+          - script: |
+              cd auth-backend
+              go build -o main
+            displayName: 'Compilar backend en Go'
+
+          - task: Docker@2
+            inputs:
+              containerRegistry: 'NombreDelRegistro' # Define en Azure DevOps -> service connection
+              repository: '$(imageName)'
+              command: 'buildAndPush'
+              Dockerfile: '**/Dockerfile'
+              tags: |
+                $(Build.BuildId)
+
+  - stage: Deploy
+    dependsOn: Build
+    jobs:
+      - deployment: DeployInfra
+        environment: 'dev'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: TerraformInstaller@1
+
+                - script: |
+                    cd devops/terraform
+                    terraform init
+                    terraform apply -auto-approve
+                  displayName: 'Aplicar Terraform'
